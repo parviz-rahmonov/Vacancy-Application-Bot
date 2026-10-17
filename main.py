@@ -1,5 +1,4 @@
-from api_token import BOT_TOKEN
-from api_token import ADMIN_ID
+from config import BOT_TOKEN, ADMIN_ID
 import asyncio
 import html
 import logging
