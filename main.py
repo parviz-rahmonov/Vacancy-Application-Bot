@@ -214,8 +214,8 @@ async def cb_start_form(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.message(ApplicationForm.full_name)
 async def process_full_name(message: Message, state: FSMContext) -> None:
-    name = message.text.strip()
-    if len(name) < 2:
+    name = (message.text or "").strip()
+    if not (2 <= len(name) <= 120):
         await message.answer(
             "⚠️ Введите корректное ФИО (минимум 2 символа).",
             reply_markup=form_reply_keyboard(),
@@ -233,7 +233,7 @@ async def process_full_name(message: Message, state: FSMContext) -> None:
 @router.message(ApplicationForm.age)
 async def process_age(message: Message, state: FSMContext) -> None:
     text = message.text.strip()
-    if not text.isdigit() or not (14 <= int(text) <= 80):
+    if not (text.isascii() and text.isdecimal() and len(text) <= 2 and 14 <= int(text) <= 80):
         await message.answer(
             "⚠️ Введите корректный возраст (от 14 до 80 лет).",
             reply_markup=form_reply_keyboard(),
@@ -251,7 +251,7 @@ async def process_age(message: Message, state: FSMContext) -> None:
 @router.message(ApplicationForm.city)
 async def process_city(message: Message, state: FSMContext) -> None:
     city = message.text.strip()
-    if len(city) < 2:
+    if not (2 <= len(city) <= 100):
         await message.answer(
             "⚠️ Введите корректное название города.",
             reply_markup=form_reply_keyboard(),
@@ -270,7 +270,10 @@ async def process_city(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(ApplicationForm.direction, F.data.startswith("direction_"))
 async def process_direction(callback: CallbackQuery, state: FSMContext) -> None:
-    direction_label = next(label for label, cb in DIRECTIONS if cb == callback.data)
+    direction_label = next((label for label, cb in DIRECTIONS if cb == callback.data), None)
+    if direction_label is None:
+        await callback.answer("Выберите направление из списка.", show_alert=True)
+        return
     await state.update_data(direction=direction_label)
     # edit_text не влияет на ReplyKeyboard — она остаётся
     await callback.message.edit_text(
@@ -300,7 +303,7 @@ async def process_direction_wrong(message: Message) -> None:
 @router.message(ApplicationForm.experience)
 async def process_experience(message: Message, state: FSMContext) -> None:
     exp = message.text.strip()
-    if len(exp) < 5:
+    if not (5 <= len(exp) <= 1200):
         await message.answer(
             "⚠️ Опишите ваш опыт подробнее (минимум 5 символов).",
             reply_markup=form_reply_keyboard(),
@@ -319,7 +322,7 @@ async def process_experience(message: Message, state: FSMContext) -> None:
 @router.message(ApplicationForm.about)
 async def process_about(message: Message, state: FSMContext) -> None:
     about = message.text.strip()
-    if len(about) < 10:
+    if not (10 <= len(about) <= 1200):
         await message.answer(
             "⚠️ Напишите немного больше о себе (минимум 10 символов).",
             reply_markup=form_reply_keyboard(),
@@ -337,11 +340,11 @@ async def process_about(message: Message, state: FSMContext) -> None:
 
 @router.message(ApplicationForm.phone)
 async def process_phone(message: Message, state: FSMContext) -> None:
-    phone = message.text.strip().replace(" ", "").replace("-", "")
+    phone = (message.text or "").strip().replace(" ", "").replace("-", "")
     normalized = phone
     if phone.startswith("8") and len(phone) == 11:
         normalized = "+7" + phone[1:]
-    if not (normalized.startswith("+7") and len(normalized) == 12 and normalized[1:].isdigit()):
+    if not (normalized.startswith("+7") and len(normalized) == 12 and normalized[1:].isascii() and normalized[1:].isdecimal()):
         await message.answer(
             "⚠️ Номер введён некорректно.\n"
             "Попробуйте ещё раз в формате <b>+7XXXXXXXXXX</b>.",
@@ -363,13 +366,14 @@ async def process_photo(message: Message, state: FSMContext) -> None:
     photo_file_id = message.photo[-1].file_id
     await state.update_data(photo_file_id=photo_file_id)
     data = await state.get_data()
-    # answer_photo тоже должен явно получить form_reply_keyboard(),
-    # иначе на ряде клиентов (iOS особенно) клавиатура слетает при отправке медиа
+    # Show the photo and full summary separately to avoid the 1024-char caption limit.
     await message.answer_photo(
         photo=photo_file_id,
-        caption=build_summary(data) + "\n\n<b>Всё верно? Отправляем заявку?</b>",
+        reply_markup=form_reply_keyboard(),
+    )
+    await message.answer(
+        build_summary(data) + "\n\n<b>Всё верно? Отправляем заявку?</b>",
         parse_mode=ParseMode.HTML,
-        reply_markup=form_reply_keyboard(),  # ← держим ReplyKeyboard и здесь
     )
     # Inline confirm отправляем отдельным сообщением чтобы не конфликтовать
     await message.answer(
