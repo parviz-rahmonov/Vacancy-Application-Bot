@@ -1,6 +1,7 @@
 from api_token import BOT_TOKEN
 from api_token import ADMIN_ID
 import asyncio
+import html
 import logging
 import sys
 from typing import Any
@@ -129,13 +130,13 @@ class ApplicationForm(StatesGroup):
 def build_summary(data: dict[str, Any]) -> str:
     return (
         "📋 <b>Ваша заявка:</b>\n\n"
-        f"👤 <b>ФИО:</b> {data.get('full_name', '—')}\n"
-        f"🎂 <b>Возраст:</b> {data.get('age', '—')}\n"
-        f"🏙 <b>Город:</b> {data.get('city', '—')}\n"
-        f"🎯 <b>Направление:</b> {data.get('direction', '—')}\n"
-        f"🗂 <b>Опыт работы:</b>\n{data.get('experience', '—')}\n\n"
-        f"📝 <b>О себе:</b>\n{data.get('about', '—')}\n\n"
-        f"📞 <b>Телефон:</b> {data.get('phone', '—')}\n"
+        f"👤 <b>ФИО:</b> {html.escape(str(data.get('full_name', '—')))}\n"
+        f"🎂 <b>Возраст:</b> {html.escape(str(data.get('age', '—')))}\n"
+        f"🏙 <b>Город:</b> {html.escape(str(data.get('city', '—')))}\n"
+        f"🎯 <b>Направление:</b> {html.escape(str(data.get('direction', '—')))}\n"
+        f"🗂 <b>Опыт работы:</b>\n{html.escape(str(data.get('experience', '—')))}\n\n"
+        f"📝 <b>О себе:</b>\n{html.escape(str(data.get('about', '—')))}\n\n"
+        f"📞 <b>Телефон:</b> {html.escape(str(data.get('phone', '—')))}\n"
         f"🖼 <b>Фото:</b> {'прикреплено' if data.get('photo_file_id') else '—'}"
     )
 
@@ -395,41 +396,44 @@ async def process_photo_wrong(message: Message) -> None:
 @router.callback_query(ApplicationForm.confirm, F.data == "confirm_yes")
 async def confirm_yes(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
     data = await state.get_data()
-    await state.clear()
+    photo_id = data.get("photo_file_id")
+    if not photo_id:
+        await callback.answer("Фото не найдено. Начните анкету заново.", show_alert=True)
+        return
 
     user = callback.from_user
-    user_link = f'<a href="tg://user?id={user.id}">{user.full_name}</a>'
-    admin_caption = (
-        f"🔔 <b>Новая заявка на вакансию!</b>\n\n"
-        f"От: {user_link} (@{user.username or '—'}, ID: <code>{user.id}</code>)\n\n"
+    user_link = f'<a href="tg://user?id={user.id}">{html.escape(user.full_name)}</a>'
+    username = html.escape(user.username or "—")
+    admin_text = (
+        "🔔 <b>Новая заявка на вакансию!</b>\n\n"
+        f"От: {user_link} (@{username}, ID: <code>{user.id}</code>)\n\n"
         + build_summary(data)
     )
 
     try:
-        await bot.send_photo(
-            chat_id=ADMIN_ID,
-            photo=data["photo_file_id"],
-            caption=admin_caption,
-            parse_mode=ParseMode.HTML,
-        )
-        # Только здесь убираем ReplyKeyboard — анкета полностью завершена
-        await callback.message.answer(
-            "✅ <b>Заявка успешно отправлена!</b>\n\n"
-            "Наш HR-специалист свяжется с вами в ближайшее время. Удачи! 🍀\n\n"
-            "Чтобы подать новую заявку — нажмите /start",
-            parse_mode=ParseMode.HTML,
-            reply_markup=remove_reply_keyboard(),  # ← убираем только здесь
-        )
-        await callback.message.delete()
-        logger.info("Заявка от user_id=%s отправлена администратору", user.id)
-    except Exception as e:
-        logger.error("Ошибка при отправке: %s", e)
-        await callback.message.answer(
-            "❌ Ошибка при отправке. Попробуйте позже.",
-            reply_markup=remove_reply_keyboard(),
-        )
+        # Keep the application state until both messages have been delivered.
+        # A separate text message avoids Telegram's 1024-character photo caption limit.
+        await bot.send_photo(chat_id=ADMIN_ID, photo=photo_id)
+        await bot.send_message(chat_id=ADMIN_ID, text=admin_text, parse_mode=ParseMode.HTML)
+    except Exception:
+        logger.exception("Ошибка доставки заявки user_id=%s", user.id)
+        await callback.answer("Не удалось отправить заявку. Повторите попытку.", show_alert=True)
+        return
 
-    await callback.answer("✅ Заявка отправлена!")
+    await state.clear()
+    await callback.answer("Заявка отправлена!")
+    await callback.message.answer(
+        "✅ <b>Заявка успешно отправлена!</b>\n\n"
+        "Наш HR-специалист свяжется с вами в ближайшее время. Удачи! 🍀\n\n"
+        "Чтобы подать новую заявку — нажмите /start",
+        parse_mode=ParseMode.HTML,
+        reply_markup=remove_reply_keyboard(),
+    )
+    try:
+        await callback.message.delete()
+    except Exception:
+        logger.warning("Не удалось удалить сообщение подтверждения user_id=%s", user.id)
+    logger.info("Заявка от user_id=%s отправлена администратору", user.id)
 
 
 @router.message(ApplicationForm.confirm)
