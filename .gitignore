@@ -1,2 +1,11 @@
 api_token.py
-__pycache__
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.idea/
+.vscode/
