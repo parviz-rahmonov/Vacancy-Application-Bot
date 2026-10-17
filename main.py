@@ -1,6 +1,6 @@
-from api_token import BOT_TOKEN
-from api_token import ADMIN_ID
+from config import BOT_TOKEN, ADMIN_ID
 import asyncio
+import html
 import logging
 import sys
 from typing import Any
@@ -129,13 +129,13 @@ class ApplicationForm(StatesGroup):
 def build_summary(data: dict[str, Any]) -> str:
     return (
         "📋 <b>Ваша заявка:</b>\n\n"
-        f"👤 <b>ФИО:</b> {data.get('full_name', '—')}\n"
-        f"🎂 <b>Возраст:</b> {data.get('age', '—')}\n"
-        f"🏙 <b>Город:</b> {data.get('city', '—')}\n"
-        f"🎯 <b>Направление:</b> {data.get('direction', '—')}\n"
-        f"🗂 <b>Опыт работы:</b>\n{data.get('experience', '—')}\n\n"
-        f"📝 <b>О себе:</b>\n{data.get('about', '—')}\n\n"
-        f"📞 <b>Телефон:</b> {data.get('phone', '—')}\n"
+        f"👤 <b>ФИО:</b> {html.escape(str(data.get('full_name', '—')))}\n"
+        f"🎂 <b>Возраст:</b> {html.escape(str(data.get('age', '—')))}\n"
+        f"🏙 <b>Город:</b> {html.escape(str(data.get('city', '—')))}\n"
+        f"🎯 <b>Направление:</b> {html.escape(str(data.get('direction', '—')))}\n"
+        f"🗂 <b>Опыт работы:</b>\n{html.escape(str(data.get('experience', '—')))}\n\n"
+        f"📝 <b>О себе:</b>\n{html.escape(str(data.get('about', '—')))}\n\n"
+        f"📞 <b>Телефон:</b> {html.escape(str(data.get('phone', '—')))}\n"
         f"🖼 <b>Фото:</b> {'прикреплено' if data.get('photo_file_id') else '—'}"
     )
 
@@ -214,8 +214,8 @@ async def cb_start_form(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.message(ApplicationForm.full_name)
 async def process_full_name(message: Message, state: FSMContext) -> None:
-    name = message.text.strip()
-    if len(name) < 2:
+    name = (message.text or "").strip()
+    if not (2 <= len(name) <= 120):
         await message.answer(
             "⚠️ Введите корректное ФИО (минимум 2 символа).",
             reply_markup=form_reply_keyboard(),
@@ -232,8 +232,8 @@ async def process_full_name(message: Message, state: FSMContext) -> None:
 
 @router.message(ApplicationForm.age)
 async def process_age(message: Message, state: FSMContext) -> None:
-    text = message.text.strip()
-    if not text.isdigit() or not (14 <= int(text) <= 80):
+    text = (message.text or "").strip()
+    if not (text.isascii() and text.isdecimal() and len(text) <= 2 and 14 <= int(text) <= 80):
         await message.answer(
             "⚠️ Введите корректный возраст (от 14 до 80 лет).",
             reply_markup=form_reply_keyboard(),
@@ -250,8 +250,8 @@ async def process_age(message: Message, state: FSMContext) -> None:
 
 @router.message(ApplicationForm.city)
 async def process_city(message: Message, state: FSMContext) -> None:
-    city = message.text.strip()
-    if len(city) < 2:
+    city = (message.text or "").strip()
+    if not (2 <= len(city) <= 100):
         await message.answer(
             "⚠️ Введите корректное название города.",
             reply_markup=form_reply_keyboard(),
@@ -270,7 +270,10 @@ async def process_city(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(ApplicationForm.direction, F.data.startswith("direction_"))
 async def process_direction(callback: CallbackQuery, state: FSMContext) -> None:
-    direction_label = next(label for label, cb in DIRECTIONS if cb == callback.data)
+    direction_label = next((label for label, cb in DIRECTIONS if cb == callback.data), None)
+    if direction_label is None:
+        await callback.answer("Выберите направление из списка.", show_alert=True)
+        return
     await state.update_data(direction=direction_label)
     # edit_text не влияет на ReplyKeyboard — она остаётся
     await callback.message.edit_text(
@@ -299,8 +302,8 @@ async def process_direction_wrong(message: Message) -> None:
 
 @router.message(ApplicationForm.experience)
 async def process_experience(message: Message, state: FSMContext) -> None:
-    exp = message.text.strip()
-    if len(exp) < 5:
+    exp = (message.text or "").strip()
+    if not (5 <= len(exp) <= 1200):
         await message.answer(
             "⚠️ Опишите ваш опыт подробнее (минимум 5 символов).",
             reply_markup=form_reply_keyboard(),
@@ -318,8 +321,8 @@ async def process_experience(message: Message, state: FSMContext) -> None:
 
 @router.message(ApplicationForm.about)
 async def process_about(message: Message, state: FSMContext) -> None:
-    about = message.text.strip()
-    if len(about) < 10:
+    about = (message.text or "").strip()
+    if not (10 <= len(about) <= 1200):
         await message.answer(
             "⚠️ Напишите немного больше о себе (минимум 10 символов).",
             reply_markup=form_reply_keyboard(),
@@ -337,11 +340,11 @@ async def process_about(message: Message, state: FSMContext) -> None:
 
 @router.message(ApplicationForm.phone)
 async def process_phone(message: Message, state: FSMContext) -> None:
-    phone = message.text.strip().replace(" ", "").replace("-", "")
+    phone = (message.text or "").strip().replace(" ", "").replace("-", "")
     normalized = phone
     if phone.startswith("8") and len(phone) == 11:
         normalized = "+7" + phone[1:]
-    if not (normalized.startswith("+7") and len(normalized) == 12 and normalized[1:].isdigit()):
+    if not (normalized.startswith("+7") and len(normalized) == 12 and normalized[1:].isascii() and normalized[1:].isdecimal()):
         await message.answer(
             "⚠️ Номер введён некорректно.\n"
             "Попробуйте ещё раз в формате <b>+7XXXXXXXXXX</b>.",
@@ -363,13 +366,14 @@ async def process_photo(message: Message, state: FSMContext) -> None:
     photo_file_id = message.photo[-1].file_id
     await state.update_data(photo_file_id=photo_file_id)
     data = await state.get_data()
-    # answer_photo тоже должен явно получить form_reply_keyboard(),
-    # иначе на ряде клиентов (iOS особенно) клавиатура слетает при отправке медиа
+    # Show the photo and full summary separately to avoid the 1024-char caption limit.
     await message.answer_photo(
         photo=photo_file_id,
-        caption=build_summary(data) + "\n\n<b>Всё верно? Отправляем заявку?</b>",
+        reply_markup=form_reply_keyboard(),
+    )
+    await message.answer(
+        build_summary(data) + "\n\n<b>Всё верно? Отправляем заявку?</b>",
         parse_mode=ParseMode.HTML,
-        reply_markup=form_reply_keyboard(),  # ← держим ReplyKeyboard и здесь
     )
     # Inline confirm отправляем отдельным сообщением чтобы не конфликтовать
     await message.answer(
@@ -395,41 +399,44 @@ async def process_photo_wrong(message: Message) -> None:
 @router.callback_query(ApplicationForm.confirm, F.data == "confirm_yes")
 async def confirm_yes(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
     data = await state.get_data()
-    await state.clear()
+    photo_id = data.get("photo_file_id")
+    if not photo_id:
+        await callback.answer("Фото не найдено. Начните анкету заново.", show_alert=True)
+        return
 
     user = callback.from_user
-    user_link = f'<a href="tg://user?id={user.id}">{user.full_name}</a>'
-    admin_caption = (
-        f"🔔 <b>Новая заявка на вакансию!</b>\n\n"
-        f"От: {user_link} (@{user.username or '—'}, ID: <code>{user.id}</code>)\n\n"
+    user_link = f'<a href="tg://user?id={user.id}">{html.escape(user.full_name)}</a>'
+    username = html.escape(user.username or "—")
+    admin_text = (
+        "🔔 <b>Новая заявка на вакансию!</b>\n\n"
+        f"От: {user_link} (@{username}, ID: <code>{user.id}</code>)\n\n"
         + build_summary(data)
     )
 
     try:
-        await bot.send_photo(
-            chat_id=ADMIN_ID,
-            photo=data["photo_file_id"],
-            caption=admin_caption,
-            parse_mode=ParseMode.HTML,
-        )
-        # Только здесь убираем ReplyKeyboard — анкета полностью завершена
-        await callback.message.answer(
-            "✅ <b>Заявка успешно отправлена!</b>\n\n"
-            "Наш HR-специалист свяжется с вами в ближайшее время. Удачи! 🍀\n\n"
-            "Чтобы подать новую заявку — нажмите /start",
-            parse_mode=ParseMode.HTML,
-            reply_markup=remove_reply_keyboard(),  # ← убираем только здесь
-        )
-        await callback.message.delete()
-        logger.info("Заявка от user_id=%s отправлена администратору", user.id)
-    except Exception as e:
-        logger.error("Ошибка при отправке: %s", e)
-        await callback.message.answer(
-            "❌ Ошибка при отправке. Попробуйте позже.",
-            reply_markup=remove_reply_keyboard(),
-        )
+        # Keep the application state until both messages have been delivered.
+        # A separate text message avoids Telegram's 1024-character photo caption limit.
+        await bot.send_photo(chat_id=ADMIN_ID, photo=photo_id)
+        await bot.send_message(chat_id=ADMIN_ID, text=admin_text, parse_mode=ParseMode.HTML)
+    except Exception:
+        logger.exception("Ошибка доставки заявки user_id=%s", user.id)
+        await callback.answer("Не удалось отправить заявку. Повторите попытку.", show_alert=True)
+        return
 
-    await callback.answer("✅ Заявка отправлена!")
+    await state.clear()
+    await callback.answer("Заявка отправлена!")
+    await callback.message.answer(
+        "✅ <b>Заявка успешно отправлена!</b>\n\n"
+        "Наш HR-специалист свяжется с вами в ближайшее время. Удачи! 🍀\n\n"
+        "Чтобы подать новую заявку — нажмите /start",
+        parse_mode=ParseMode.HTML,
+        reply_markup=remove_reply_keyboard(),
+    )
+    try:
+        await callback.message.delete()
+    except Exception:
+        logger.warning("Не удалось удалить сообщение подтверждения user_id=%s", user.id)
+    logger.info("Заявка от user_id=%s отправлена администратору", user.id)
 
 
 @router.message(ApplicationForm.confirm)

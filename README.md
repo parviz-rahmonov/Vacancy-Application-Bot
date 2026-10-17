@@ -1,89 +1,107 @@
-# 📋 Vacancy Application Bot
+# Vacancy Application Bot
 
-Telegram-бот для подачи заявки на вакансию. Пользователь проходит пошаговую анкету, результат отправляется администратору.
+[English](README.md) | [Русский](README.ru.md)
 
-## 🚀 Быстрый старт
+A Telegram bot for collecting job applications. Applicants complete a guided form, review their details, and submit their application to a configured administrator.
+
+## Features
+
+- Step-by-step application form using aiogram FSM
+- Fields: full name, age, city, job category, experience, introduction, phone number, and photo
+- Cancel and restart controls
+- Input validation and HTML escaping for user-supplied content
+- Photo and application details delivered to the administrator
+- Application state retained when Telegram delivery fails, allowing a retry
+- Unit tests and GitHub Actions CI
+
+**Interface language:** Russian. The English README documents the project for international reviewers; it does not translate the bot interface.
+
+## Requirements
+
+- Python 3.10 or later
+- A Telegram bot token from [@BotFather](https://t.me/BotFather)
+- Your numeric Telegram user ID (administrator)
+- Dependencies from `requirements.txt`
+
+## Local setup
 
 ```bash
-pip install aiogram==3.7.0
+git clone https://github.com/parviz-rahmonov/Vacancy-Application-Bot.git
+cd Vacancy-Application-Bot
+python -m venv .venv
+```
+
+Activate the environment:
+
+- Windows PowerShell: `.venv\Scripts\Activate.ps1`
+- Linux/macOS: `source .venv/bin/activate`
+
+Install dependencies:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+Copy `.env.example` to `.env` and configure:
+
+```dotenv
+BOT_TOKEN=your_bot_token
+ADMIN_ID=123456789
+```
+
+Never commit `.env` or share a real token.
+
+Run the bot:
+
+```bash
 python main.py
 ```
 
-В `main.py` укажи свои значения:
-```python
-BOT_TOKEN = "ваш токен от @BotFather"
-ADMIN_ID  = ваш Telegram ID
+The administrator must start a conversation with the bot before the bot can send them messages.
+
+## Running tests
+
+```bash
+python -m unittest discover -s tests -v
 ```
 
----
+GitHub Actions is configured in `.github/workflows/tests.yml` to run tests on pushes and pull requests. Passing tests do not guarantee that the live Telegram integration works.
 
-## 🛠 Стек
+## Repository structure
 
-| Компонент | Версия |
-|-----------|--------|
-| Python    | 3.10+  |
-| aiogram   | 3.7.0  |
-| FSM Storage | MemoryStorage (in-memory) |
-
----
-
-## 🏗 Архитектура
-
-```
-main.py
-│
-├── Конфигурация
-│   ├── BOT_TOKEN, ADMIN_ID
-│   └── DIRECTIONS — список направлений вакансий
-│
-├── Клавиатуры
-│   ├── start_keyboard()        — Inline «Заполнить анкету»
-│   ├── form_reply_keyboard()   — ReplyKeyboard «Отмена / Начать заново»
-│   │                             persistent=True → не скрывается при наборе
-│   ├── directions_keyboard()   — Inline выбор направления
-│   └── confirm_keyboard()      — Inline «Отправить заявку»
-│
-├── FSM — ApplicationForm (9 шагов)
-│   ├── full_name   → возраст
-│   ├── age         → город
-│   ├── city        → направление (Inline)
-│   ├── direction   → опыт работы
-│   ├── experience  → о себе
-│   ├── about       → телефон
-│   ├── phone       → фото
-│   ├── photo       → подтверждение
-│   └── confirm     → отправка администратору
-│
-├── Глобальные хендлеры (приоритет выше FSM)
-│   ├── BTN_CANCEL  — сброс состояния, выход из анкеты
-│   └── BTN_RESTART — сброс + возврат на /start
-│
-└── Точка входа
-    └── main() — polling, MemoryStorage, Router
-```
-
----
-
-## 👤 Роли
-
-| Роль | Что может |
-|------|-----------|
-| **Пользователь** | Запускает `/start`, заполняет анкету, отменяет или перезапускает в любой момент |
-| **Администратор** | Получает готовую заявку (фото + все данные) в личные сообщения |
-
----
-
-## 📂 Структура проекта
-
-```
+```text
 .
-└── main.py   # весь код в одном файле
+├── main.py                    # Bot handlers, form states, keyboards
+├── config.py                  # Environment-based settings validation
+├── requirements.txt
+├── .env.example
+├── .gitignore
+├── tests/
+│   └── test_application.py
+└── .github/workflows/
+    └── tests.yml
 ```
 
----
+## Workflow
 
-## ⚠️ Примечания
+1. Applicant sends `/start` and chooses to apply.
+2. The bot collects and validates the form fields.
+3. Applicant attaches a photo and reviews the summary.
+4. On confirmation, the bot sends the photo and application details to the administrator.
+5. If delivery fails, the form remains available for retry.
 
-- `MemoryStorage` — данные хранятся в памяти и сбрасываются при перезапуске бота. Для продакшена замените на `RedisStorage`.
-- `persistent=True` в ReplyKeyboard требует Telegram Bot API 6.2+.
-- Бот работает только в личных сообщениях (не в группах).
+## Current limitations
+
+- `MemoryStorage` is used: unfinished applications disappear when the process restarts.
+- Phone validation currently targets Russian `+7` numbers (or `8`-prefixed 11-digit input).
+- There is no database, applicant dashboard, or automatic duplicate-delivery prevention.
+- If the photo reaches the administrator but the text delivery fails, retrying may send the photo again.
+- The bot is intended for private chats.
+
+## Security and privacy
+
+Applications contain personal information (including phone numbers and photos). Protect administrator access, limit data retention, and obtain appropriate consent before collecting or processing applicant data. Do not log or commit applicant data or credentials.
+
+## License
+
+No license file is currently included. Usage and redistribution rights are not granted by default.
