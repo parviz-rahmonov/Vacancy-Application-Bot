@@ -232,7 +232,7 @@ async def process_full_name(message: Message, state: FSMContext) -> None:
 
 @router.message(ApplicationForm.age)
 async def process_age(message: Message, state: FSMContext) -> None:
-    text = message.text.strip()
+    text = (message.text or "").strip()
     if not (text.isascii() and text.isdecimal() and len(text) <= 2 and 14 <= int(text) <= 80):
         await message.answer(
             "⚠️ Введите корректный возраст (от 14 до 80 лет).",
@@ -250,7 +250,7 @@ async def process_age(message: Message, state: FSMContext) -> None:
 
 @router.message(ApplicationForm.city)
 async def process_city(message: Message, state: FSMContext) -> None:
-    city = message.text.strip()
+    city = (message.text or "").strip()
     if not (2 <= len(city) <= 100):
         await message.answer(
             "⚠️ Введите корректное название города.",
@@ -302,7 +302,7 @@ async def process_direction_wrong(message: Message) -> None:
 
 @router.message(ApplicationForm.experience)
 async def process_experience(message: Message, state: FSMContext) -> None:
-    exp = message.text.strip()
+    exp = (message.text or "").strip()
     if not (5 <= len(exp) <= 1200):
         await message.answer(
             "⚠️ Опишите ваш опыт подробнее (минимум 5 символов).",
@@ -321,7 +321,7 @@ async def process_experience(message: Message, state: FSMContext) -> None:
 
 @router.message(ApplicationForm.about)
 async def process_about(message: Message, state: FSMContext) -> None:
-    about = message.text.strip()
+    about = (message.text or "").strip()
     if not (10 <= len(about) <= 1200):
         await message.answer(
             "⚠️ Напишите немного больше о себе (минимум 10 символов).",
